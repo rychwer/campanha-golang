@@ -42,6 +42,15 @@ func PostCampanha(w http.ResponseWriter, r *http.Request) {
 
 	repository := repository.NewRepositoryCampanha(db)
 
+	hasCampanhaNome, erro := repository.VerificaCampanhaPorNome(campanha.NomeCampanha)
+	if erro != nil && !hasCampanhaNome {
+		handle.Erro(w, http.StatusInternalServerError, erro)
+		return
+	}
+	if hasCampanhaNome {
+		handle.Erro(w, http.StatusBadRequest, erro)
+		return
+	}
 	
 	campanhasVigentes, erro := repository.RecuperarTodasCampanhasVigentes()
 	if erro != nil {
@@ -78,6 +87,7 @@ func GetCampanhas(w http.ResponseWriter, request *http.Request) {
 	campanhas, erro := repository.RecuperaTodasCampanhas()
 	if erro != nil {
 		handle.Erro(w, http.StatusInternalServerError, erro)
+		return
 	}
 
 	handle.JSON(w, http.StatusOK, campanhas)
@@ -117,6 +127,7 @@ func PutCampanha(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 
 	repository := repository.NewRepositoryCampanha(db)
+	
 	if erro := repository.AtualizarCampanha(campanhaID, campanha); erro != nil {
 		handle.Erro(w, http.StatusInternalServerError, erro)
 		return
@@ -165,8 +176,12 @@ func GetCampanhaById(w http.ResponseWriter, r *http.Request) {
 
 	repository := repository.NewRepositoryCampanha(db)
 	campanha, erro := repository.RecuperarCampanhaPorID(campanhaID)
-	if erro != nil {
+	if erro != nil && campanha.ID == 0 {
+		handle.Erro(w, http.StatusBadRequest, erro)
+		return
+	} else if erro != nil {
 		handle.Erro(w, http.StatusInternalServerError, erro)
+		return
 	}
 
 	handle.JSON(w, http.StatusOK, campanha)
@@ -190,6 +205,7 @@ func GetCampanhaByTimeCoracao(w http.ResponseWriter, r *http.Request) {
 	campanha, erro := repository.RecuperarCampanhaPorTimeCoracao(idTimeCoracao)
 	if erro != nil {
 		handle.Erro(w, http.StatusInternalServerError, erro)
+		return
 	}
 
 	handle.JSON(w, http.StatusOK, campanha)

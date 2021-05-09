@@ -1,12 +1,16 @@
 package repository
 
 import (
+	"errors"
 	"strings"
 	"fmt"
 	"time"
 	"campanha-golang/src/model"
 	"database/sql"
 )
+
+const dataFormatAnoMesDia = "2006-01-02"
+const dataFormatDiaMesAno = "02/01/2006"
 
 type Campanha struct {
 	db *sql.DB
@@ -23,7 +27,7 @@ func (repository Campanha) CriarCampanha(campanha model.Campanha) (uint64, error
 	}
 	defer statement.Close()
 
-	resultado, erro := statement.Exec(campanha.NomeCampanha, campanha.IdTimeCoracao, campanha.DataVigenciaBanco.Format("2006-01-02"))
+	resultado, erro := statement.Exec(campanha.NomeCampanha, campanha.IdTimeCoracao, campanha.DataVigenciaBanco.Format(dataFormatAnoMesDia))
 
 	if erro != nil {
 		return 0, erro
@@ -38,7 +42,7 @@ func (repository Campanha) CriarCampanha(campanha model.Campanha) (uint64, error
 }
 
 func (repository Campanha) RecuperarTodasCampanhasVigentes() ([]model.Campanha, error) {
-	linhas, erro := repository.db.Query("select * from campanha as c where c.dataVigencia >= ? ORDER by c.dataVigencia ASC", time.Now().Format("2006-01-02"))
+	linhas, erro := repository.db.Query("select * from campanha as c where c.dataVigencia >= ? ORDER by c.dataVigencia ASC", time.Now().Format(dataFormatAnoMesDia))
 
 	if erro != nil {
 		return nil, erro
@@ -79,7 +83,7 @@ func (repository Campanha) RecuperaTodasCampanhas() ([]model.Campanha, error) {
 		}
 
 		dataFormatada, _ := time.Parse(time.RFC3339, campanha.DataVigencia)
-		campanha.DataVigencia = dataFormatada.Format("02/01/2006")
+		campanha.DataVigencia = dataFormatada.Format(dataFormatDiaMesAno)
 
 		campanhas = append(campanhas, campanha)
 	}
@@ -94,7 +98,9 @@ func (repository Campanha) AtualizarCampanha(campanhaID uint64, campanha model.C
 	}
 	defer statement.Close()
 
-	if _, erro = statement.Exec(campanha.NomeCampanha, campanha.IdTimeCoracao, campanha.DataVigencia, campanhaID); erro != nil {
+	dataFormatada, _ := time.Parse(model.LayoutData, campanha.DataVigencia)
+
+	if _, erro = statement.Exec(campanha.NomeCampanha, campanha.IdTimeCoracao, dataFormatada.Format(dataFormatAnoMesDia), campanhaID); erro != nil {
 		return erro
 	}
 
@@ -130,6 +136,12 @@ func (repository Campanha) RecuperarCampanhaPorID(campanhaID uint64) (model.Camp
 		}
 	}
 
+	if campanha.ID == 0 {
+		return campanha, errors.New("nenhuma campanha encontrada") 
+	}
+
+	dataFormatada, _ := time.Parse(time.RFC3339, campanha.DataVigencia)
+	campanha.DataVigencia = dataFormatada.Format(dataFormatDiaMesAno)
 	return campanha, nil
 }
 
@@ -177,4 +189,26 @@ func (repository Campanha) AtualizarTodasAsCampanhas(campanhas []model.Campanha)
 	}
 
     return nil
+}
+
+func (repository Campanha) VerificaCampanhaPorNome(nomeCampanha string) (bool, error) {
+	linhas, erro := repository.db.Query("select count(campanha.idCampanha) from campanha where nomeCampanha like ?", nomeCampanha)
+	if erro != nil {
+		return false, erro
+	}
+	defer linhas.Close()
+
+	var countCampanhaMesmoNome uint64
+
+	for linhas.Next() {
+		if erro = linhas.Scan(&countCampanhaMesmoNome); erro != nil {
+			return false, erro
+		}
+	}
+
+	if countCampanhaMesmoNome > 0 {
+		return true, errors.New("já existe uma campanha com o mesmo nome")
+	}
+	
+	return false, nil
 }
